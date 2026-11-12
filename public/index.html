@@ -511,10 +511,16 @@ html,body{width:100%;height:100%;max-width:100%;overflow:hidden}
 
 <div id="start"><div class="island-bg"></div><div class="mc-menu-shell"><header class="mc-menu-head"><div class="mc-brand"><span class="mc-grass">▦</span><div><b>ISLAND SURVIVAL</b><small>عالمك يبدأ من هنا</small></div></div><span class="mc-avatar">⛏️</span></header><main class="mc-menu-main"><section id="menuHome" class="mc-page"><h2>العب</h2><button class="mc-big" id="continueWorld">▶ متابعة آخر عالم</button><button class="mc-big" id="openCreate">＋ إنشاء عالم جديد</button><button class="mc-big" id="openServers">🌐 السيرفرات</button>
 <button class="mc-big secondary" id="openWorlds">▣ عوالمك</button><button class="mc-big secondary" id="openArtGuide">🎨 دليل الرسومات</button><button class="mc-big secondary" id="openMenuSettings">⚙ الإعدادات</button><div class="mc-world-preview"><div class="mc-preview-sky">☀️　☁️</div><div class="mc-preview-hills"></div><div class="mc-preview-label">استكشف، ابنِ، وابقَ على قيد الحياة</div></div></section><section id="menuCreate" class="mc-page" hidden><div class="mc-page-title"><button class="mc-back" data-back>‹</button><h2>إنشاء عالم جديد</h2></div><label class="mc-field">اسم العالم<input id="worldName" maxlength="24" value="عالمي الجديد" placeholder="اكتب اسم العالم"></label><div class="world-config"><label><span>نوع العالم</span><select id="worldtype"><option value="classic">🌿 جزيرة متنوعة</option><option value="desert">🏜️ صحراء</option><option value="snow">❄️ عالم ثلجي</option><option value="volcanic">🌋 بركاني</option><option value="cavern">🕳️ ممالك الكهوف</option></select></label><label><span>بذرة العالم (Seed)</span><div class="seed-control"><input id="worldseed" inputmode="numeric" placeholder="رقم أو كلمة"><button type="button" id="randomSeed">🎲</button></div></label><label><span>مظهر الشخصية</span><select id="skinpick"><option value="0">المغامر</option><option value="1">المستكشف</option><option value="2">الناجي</option><option value="3">حارس الغابة</option><option value="4">الرحّال</option></select></label></div><label class="menu-check" style="display:flex;align-items:center;gap:9px;margin:12px 0;padding:12px;background:#10243a;border:1px solid #526b84;border-radius:10px"><input id="openInventoryOnStart" type="checkbox" checked style="width:20px;height:20px;accent-color:#d69b45"> 🎒 فتح الحقيبة تلقائيًا عند بدء العالم</label><button class="mc-big" id="newworld">إنشاء واللعب ▶</button></section><section id="menuWorlds" class="mc-page" hidden><div class="mc-page-title"><button class="mc-back" data-back>‹</button><h2>عوالمك</h2></div><div id="worldList" class="mc-world-list"></div><p class="menu-foot">يتم حفظ كل عالم على جهازك.</p></section><section id="menuServers" class="mc-page" hidden><div class="mc-page-title"><button class="mc-back" data-back>‹</button><h2>السيرفرات</h2></div>
-<label class="mc-field">اسمك في السيرفر<input id="mpName" maxlength="16" placeholder="اكتب اسم اللاعب"></label>
+<div id="accountPanel" style="background:#10243a;border:1px solid #526b84;border-radius:10px;padding:10px;margin:8px 0"><b>👤 حساب اللاعب</b>
+<label class="mc-field">اسم المستخدم<input id="accountUser" maxlength="16" autocomplete="username" placeholder="3-16 أحرف إنجليزية أو أرقام"></label>
+<label class="mc-field">البريد الإلكتروني<input id="accountEmail" type="email" maxlength="254" autocomplete="email" placeholder="name@example.com"></label>
+<label class="mc-field">كلمة المرور<input id="accountPass" type="password" maxlength="128" autocomplete="current-password" placeholder="8 أحرف على الأقل"></label>
+<div style="display:flex;gap:8px"><button class="mc-big" id="accountLogin" style="margin:4px 0">دخول</button><button class="mc-big secondary" id="accountRegister" style="margin:4px 0">إنشاء حساب</button></div>
+<div id="verifyPanel" hidden><label class="mc-field">رمز التحقق المرسل إلى بريدك<input id="accountCode" inputmode="numeric" maxlength="6" placeholder="000000"></label><div style="display:flex;gap:8px"><button class="mc-big" id="accountVerify">تأكيد البريد</button><button class="mc-big secondary" id="accountResend">إعادة إرسال الرمز</button></div></div>
+<small id="accountStatus" style="color:#b9d4e8">يجب تأكيد البريد الإلكتروني قبل دخول اللعب الجماعي.</small></div>
 <div class="mp-name-row"><input id="mpServerUrl" placeholder="عنوان الخادم (ws:// أو wss://)"><button class="mc-big secondary" id="mpSaveUrl" style="min-height:40px;margin:0;padding:6px 14px;font-size:12px">حفظ العنوان</button></div>
-<div id="serverList" class="server-list"></div>
-<p class="menu-foot">السيرفرات الثلاثة عوالم مستقلة فعلًا على الخادم — كل عالم ببذرته ولاعبيه وحفظه الخاص. شخصيتك وحقتك تُحفظان على الخادم.</p></section>
+<div style="display:flex;gap:7px;margin:8px 0"><input id="lobbySearch" class="mc-field" style="flex:1;min-width:0" placeholder="ابحث برقم الردهة أو اسمها"><button class="mc-big secondary" id="lobbySearchBtn" style="margin:0;min-height:42px">بحث</button></div><div id="savedLobbyList" class="server-list"></div><h3 style="margin:12px 0 6px">كل الردهـات</h3><div id="serverList" class="server-list"></div>
+<p class="menu-foot">الردهـات تُنشأ تلقائيًا عند امتلاء السابقة، ولا تُحذف عند خروج اللاعبين. احفظ رقم ردهتك للعودة إلى عالمك.</p></section>
 <section id="menuOptions" class="mc-page" hidden><div class="mc-page-title"><button class="mc-back" data-back>‹</button><h2>الإعدادات</h2></div><div class="menu-settings open"><label>الصعوبة<select id="menuDifficulty"><option value="easy">سهل</option><option value="normal">عادي</option><option value="hard">صعب</option></select></label><label>حجم التحكم<input id="menuTouchScale" type="range" min="0.85" max="1.25" step="0.05" value="1"></label><label class="menu-check"><input id="menuShowHints" type="checkbox" checked> إظهار التلميحات</label></div></section></main><footer class="mc-menu-footer">نسخة البقاء المستقلة · تصميم قوائم مستوحى من ألعاب الصندوق الرملي</footer></div></div>
 <div id="artGuide" hidden style="position:fixed;inset:0;z-index:80;background:#050b14ee;overflow:auto;padding:14px;touch-action:pan-y"><div style="max-width:1100px;margin:auto;background:#15263b;border:2px solid #d69b45;border-radius:16px;padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px"><b style="font-size:18px">🎨 دليل رسومات اللعبة</b><button id="closeArtGuide" class="mc-big secondary" style="width:auto;min-height:40px;margin:0;padding:6px 14px">إغلاق ✕</button></div><p style="font-size:12px;color:#c5d5e5">مرجع الموارد والبلوكات والقوائم وأزرار التحكم المرفق مع نسخة اللعبة.</p><h3>الموارد والقوائم والتحكم</h3><img src="/assets/resource-and-ui-art.jpg" alt="رسومات الموارد والقوائم وأزرار التحكم" style="display:block;width:100%;height:auto;border-radius:10px"><h3>البلوكات وأشكال الموارد</h3><img src="/assets/block-and-controls-art.jpg" alt="رسومات البلوكات والموارد" style="display:block;width:100%;height:auto;border-radius:10px"></div></div>
 <div id="rotate">↻<br>لف الهاتف للوضع الأفقي<br><span style="font-size:13px;color:#9eb3c5">اللعبة مصممة للعب بالعرض فقط</span></div>
@@ -1508,7 +1514,7 @@ function renderModal(which='bag',context=null){
  }else if(which==='plist'){
   title.textContent='👥 اللاعبون المتصلون';
   const mkRow=(nm,me)=>{const r=document.createElement('div');r.className='player-row';r.innerHTML='<span style="font-size:22px">'+(me?'🧍':'🎮')+'</span><span style="flex:1"></span>';r.querySelector('span[style*="flex:1"]').textContent=nm;return r};
-  grid.appendChild(mkRow('أنت — '+(($('mpName').value||'').trim()||'لاعب'),true));
+  grid.appendChild(mkRow('أنت — '+(accountUser||'لاعب'),true));
   for(const p of netPlayers.values())grid.appendChild(mkRow(p.name,false));
   if(!netPlayers.size)grid.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--text-dim);padding:20px">لا يوجد لاعبون آخرون الآن.<br>شارك عنوان الخادم مع أصدقائك للانضمام إلى نفس العالم.</div>';
   body.appendChild(grid);
@@ -2025,18 +2031,19 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&playing)sa
 let net=null,netId=null,netWorld=null,netConnected=false,reconnectTries=0,netStateClock=0,netMobClock=0,netInvClock=0,mobSeq=0,remoteMobClock=0;
 let netPlayers=new Map(),remoteMobs=new Map();
 let mpServerUrl=localStorage.getItem('mp_server_url')||((location.protocol==='https:'?'wss://':'ws://')+location.hostname+':8080');
+let accountToken=localStorage.getItem('island_auth_token')||''; let accountUser=localStorage.getItem('island_auth_user')||'';
 const MP_WORLDS=[
  {id:'island',icon:'🏝️',name:'Island Survival',desc:'عالم جزر وبقاء · سيرفر بقاء عادي · موارد وتطوير وبناء واستكشاف'},
  {id:'adventure',icon:'⛏️',name:'Adventure World',desc:'عالم مغامرات واستكشاف · تركيز على الكهوف والموارد والوحوش · لعب جماعي وتعاون'},
  {id:'creative',icon:'🧱',name:'Creative World',desc:'عالم بناء وإبداع · موارد بناء متاحة · مساحة مشتركة لبناء المنازل والمشروعات'}];
 function sendMsg(o){if(net&&net.readyState===1){try{net.send(JSON.stringify(o))}catch(e){}}}
 function connectToServer(worldId){
- const name=(($('mpName').value||'').trim()||localStorage.getItem('mp_name')||('لاعب'+((Math.random()*999|0)))).slice(0,16);
- localStorage.setItem('mp_name',name);initAudio();
+ if(!accountToken){say('🔒 سجّل الدخول أولاً للعب في الردهة');return;}
+ const name=accountUser;initAudio();
  if(net){try{net.onclose=null;net.close()}catch(e){}}
  let ws;try{ws=new WebSocket(mpServerUrl)}catch(e){say('❌ عنوان الخادم غير صالح');return}
  net=ws;say('⏳ جارٍ الاتصال بالسيرفر...');
- ws.onopen=()=>{sendMsg({t:'join',world:worldId,name})};
+ ws.onopen=()=>{sendMsg({t:'join',world:worldId,name,token:accountToken})};
  ws.onerror=()=>{say('❌ تعذر الوصول إلى الخادم — تأكد أن الخادم يعمل وأن العنوان صحيح')};
  ws.onclose=()=>{if(net!==ws)return;if(netConnected){netConnected=false;$('plistbtn').style.display='none';$('chatToggle').style.display='none';$('chatPanel').style.display='none';say('🔌 انقطع الاتصال بالسيرفر');if(playing&&reconnectTries<6){reconnectTries++;const w=netWorld||worldId;setTimeout(()=>{if(!netConnected&&playing)connectToServer(w)},1500*reconnectTries)}}};
  ws.onmessage=onNetMessage;
@@ -2088,19 +2095,23 @@ function netTick(dt){
 /* --- Server browser (live status) --- */
 function markServers(txt,on){document.querySelectorAll('#serverList [data-st]').forEach(el=>{el.textContent=txt;el.className='s-status '+(on?'on':'off')})}
 function updateServerList(worlds){MP_WORLDS.forEach(w=>{const card=document.querySelector('#serverList [data-w="'+w.id+'"]');if(!card)return;const s=worlds&&worlds[w.id];const st=card.querySelector('[data-st]');const btn=card.querySelector('[data-join]');if(s&&s.online){st.textContent='🟢 متصل · اللاعبون '+s.players+'/'+s.max;st.className='s-status on';const full=s.players>=s.max;btn.disabled=full;btn.textContent=full?'ممتلئ':'دخول'}else{st.textContent='🔴 غير متصل';st.className='s-status off';btn.disabled=true;btn.textContent='متوقف'}})}
-function refreshServers(){const box=$('serverList');MP_WORLDS.forEach(w=>{let card=box.querySelector('[data-w="'+w.id+'"]');if(!card){card=document.createElement('div');card.className='server-card';card.dataset.w=w.id;card.innerHTML='<span class="s-icon">'+w.icon+'</span><span class="s-info"><b></b><small></small><span class="s-status off" data-st>جارٍ الفحص...</span></span><button class="mc-big" data-join>دخول</button>';card.querySelector('b').textContent=w.name;card.querySelector('small').textContent=w.desc;card.querySelector('[data-join]').onclick=()=>connectToServer(w.id);box.appendChild(card)}});
- let ws;try{ws=new WebSocket(mpServerUrl)}catch(e){markServers('عنوان غير صالح',false);return}
- const to=setTimeout(()=>{try{ws.close()}catch(e){}markServers('غير متصل',false)},4500);
- ws.onopen=()=>{try{ws.send(JSON.stringify({t:'info'}))}catch(e){}};
- ws.onerror=()=>{clearTimeout(to);markServers('غير متصل',false)};
- ws.onclose=()=>clearTimeout(to);
- ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.t==='info'){clearTimeout(to);updateServerList(m.worlds);try{ws.close()}catch(_){}}};
-}
-$('mpServerUrl').value=mpServerUrl;$('mpName').value=localStorage.getItem('mp_name')||'';
+function apiBase(){try{return new URL(mpServerUrl.replace(/^wss:/,'https:').replace(/^ws:/,'http:')).origin}catch(_){return location.origin}}
+function savedLobbyIds(){try{return JSON.parse(localStorage.getItem('island_saved_lobbies_'+(accountUser||'guest'))||'[]')}catch(e){return []}}
+function toggleSavedLobby(id){let a=savedLobbyIds();a=a.includes(id)?a.filter(x=>x!==id):[...a,id];localStorage.setItem('island_saved_lobbies_'+(accountUser||'guest'),JSON.stringify(a));refreshServers($('lobbySearch')?.value||'')}
+function lobbyCard(l,saved=false){const card=document.createElement('div');card.className='server-card';card.innerHTML='<span class="s-icon">🏝️</span><span class="s-info"><b></b><small></small><span class="s-status on"></span></span><button class="mc-big secondary" data-save title="حفظ الردهة">☆</button><button class="mc-big" data-join>دخول</button>';card.querySelector('b').textContent='#'+l.id+' · '+l.name;card.querySelector('small').textContent=l.players+'/'+l.max+' لاعب · '+(l.mode==='creative'?'إبداع':'بقاء')+(l.players>=l.max?' · ممتلئة':'');const st=card.querySelector('[data-st]');st.textContent=l.players>=l.max?'🟠 ممتلئة':'🟢 متاحة';st.className='s-status '+(l.players>=l.max?'off':'on');const save=card.querySelector('[data-save]');save.textContent=saved?'★':'☆';save.onclick=()=>toggleSavedLobby(l.id);const btn=card.querySelector('[data-join]');btn.disabled=l.players>=l.max;btn.textContent=l.players>=l.max?'ممتلئة':'دخول';btn.onclick=()=>connectToServer(l.id);return card;}
+async function refreshServers(query=''){const box=$('serverList'),savedBox=$('savedLobbyList');if(!box)return;box.innerHTML='<p class="menu-foot">جارٍ تحميل الردهـات...</p>';try{const u=new URL('/api/lobbies',apiBase());if(query)u.searchParams.set('q',query);const r=await fetch(u);const data=await r.json();const all=data.lobbies||[];box.innerHTML='';const fav=savedLobbyIds();if(savedBox){savedBox.innerHTML='';all.filter(l=>fav.includes(l.id)).forEach(l=>savedBox.appendChild(lobbyCard(l,true)));if(!fav.some(id=>all.some(l=>l.id===id)))savedBox.innerHTML='<p class="menu-foot">لا توجد ردهات محفوظة ضمن نتيجة البحث.</p>';}all.forEach(l=>box.appendChild(lobbyCard(l,fav.includes(l.id))));if(!all.length)box.innerHTML='<p class="menu-foot">لا توجد ردهة بهذا الرقم أو الاسم.</p>';}catch(e){box.innerHTML='<p class="menu-foot">تعذر تحميل قائمة الردهـات. تأكد من عنوان الخادم.</p>';}}
+$('lobbySearchBtn').onclick=()=>refreshServers($('lobbySearch').value.trim());$('lobbySearch').addEventListener('keydown',e=>{if(e.key==='Enter')refreshServers($('lobbySearch').value.trim())});
+async function accountRequest(path,payload){const r=await fetch(apiBase()+'/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)throw new Error(d.error||'تعذر إتمام العملية');return d;}
+function acceptAccount(d){accountToken=d.token;accountUser=d.user.username;localStorage.setItem('island_auth_token',accountToken);localStorage.setItem('island_auth_user',accountUser);$('verifyPanel').hidden=true;$('accountStatus').textContent='✅ تم تسجيل الدخول باسم '+accountUser;refreshServers();}
+async function accountAction(action){const username=$('accountUser').value.trim(),password=$('accountPass').value,status=$('accountStatus');status.textContent='جارٍ الاتصال...';try{if(action==='register'){const email=$('accountEmail').value.trim();const d=await accountRequest('register',{username,password,email});$('verifyPanel').hidden=false;status.textContent=d.message+'؛ أدخل الرمز المكوّن من 6 أرقام.';return;}const d=await accountRequest('login',{username,password});acceptAccount(d);}catch(e){status.textContent='⚠️ '+e.message;}}
+$('accountLogin').onclick=()=>accountAction('login');$('accountRegister').onclick=()=>accountAction('register');$('accountVerify').onclick=async()=>{const status=$('accountStatus');try{const d=await accountRequest('verify-email',{username:$('accountUser').value.trim(),code:$('accountCode').value.trim()});acceptAccount(d);}catch(e){status.textContent='⚠️ '+e.message;}};
+$('accountResend').onclick=async()=>{try{const d=await accountRequest('resend-code',{username:$('accountUser').value.trim()});$('accountStatus').textContent=d.message;}catch(e){$('accountStatus').textContent='⚠️ '+e.message;}};
+$('accountUser').value=accountUser;
+$('mpServerUrl').value=mpServerUrl;
 $('openServers').onclick=()=>{showMenuPage('menuServers');refreshServers()};
 $('mpSaveUrl').onclick=()=>{const v=$('mpServerUrl').value.trim();if(!v)return say('اكتب عنوان الخادم أولاً');localStorage.setItem('mp_server_url',v);mpServerUrl=v;say('✅ تم حفظ عنوان الخادم')};
 $('plistbtn').onclick=()=>{if(netConnected)renderModal('plist')};
-setInterval(()=>{if(!$('menuServers').hidden)refreshServers()},15000);
+setInterval(()=>{if(!$('menuServers').hidden)refreshServers($('lobbySearch')?.value||'')},15000);
 addEventListener('pagehide',()=>{if(netConnected)sendMsg({t:'inv',items,equipment})});
 
 

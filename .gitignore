@@ -5,3 +5,7 @@ node_modules/
 data/players.json
 data/worlds.json
 *.log
+
+# V43 private server data
+data/
+data_old/

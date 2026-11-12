@@ -1,0 +1,15 @@
+<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ISLAND SURVIVAL — إدارة السيرفرات</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1420;color:#edf5ff;font:16px Arial;padding:20px}main{max-width:760px;margin:auto}section{background:#14263a;border:1px solid #34516d;border-radius:14px;padding:16px;margin:14px 0}h1{color:#83c7ff}label{display:block;margin:12px 0}input,select,button{width:100%;padding:12px;border-radius:8px;border:1px solid #54718e;background:#0b1b2c;color:white;margin-top:6px}button{background:#1764a0;font-weight:bold;cursor:pointer}small{color:#a9bfd4}.server{padding:12px;border-bottom:1px solid #34516d}.status{white-space:pre-wrap;color:#ffd48b}
+</style><main><h1>🏝️ إدارة سيرفرات ISLAND SURVIVAL</h1><p>لوحة منفصلة عن اللعبة. لا تشارك مفتاح الإدارة مع اللاعبين.</p>
+<section><label>عنوان الخادم API<input id="base" placeholder="https://your-server.example.com"></label><label>مفتاح الإدارة<input id="key" type="password" autocomplete="off"></label><button id="load">عرض السيرفرات</button></section>
+<section><h2>إنشاء سيرفر جديد</h2><label>اسم السيرفر<input id="name" maxlength="32" placeholder="ردهة البقاء الجديدة"></label><label>نوع السيرفر<select id="mode"><option value="survival">بقاء</option><option value="creative">إبداع</option></select></label><label>الحد الأقصى للاعبين<input id="max" type="number" min="2" max="100" value="20"></label><label><input id="private" type="checkbox" style="width:auto"> سيرفر خاص (غير ظاهر للاعبين)</label><button id="create">إنشاء السيرفر</button><p id="status" class="status"></p></section>
+<section><h2>السيرفرات الحالية</h2><div id="list">اضغط «عرض السيرفرات»</div></section></main>
+<script>
+const $=id=>document.getElementById(id);
+function base(){return $('base').value.trim().replace(/\/+$/,'')}
+async function call(path,options={}){const r=await fetch(base()+path,options);const d=await r.json();if(!r.ok)throw Error(d.error||'فشل الطلب');return d}
+async function load(){try{const d=await call('/api/lobbies');$('list').innerHTML=(d.lobbies||[]).map(l=>`<div class="server"><b>#${l.id} — ${l.name}</b><br><small>${l.players}/${l.max} لاعب · ${l.mode}</small></div>`).join('')||'لا توجد سيرفرات عامة';$('status').textContent='تم تحديث القائمة';}catch(e){$('status').textContent=e.message}}
+$('load').onclick=load;
+$('create').onclick=async()=>{try{const key=$('key').value;if(!key)throw Error('أدخل مفتاح الإدارة');const d=await call('/api/admin/lobbies',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':key},body:JSON.stringify({name:$('name').value,mode:$('mode').value,max:Number($('max').value),private:$('private').checked})});$('status').textContent='تم إنشاء السيرفر #'+d.lobby.id+' بنجاح';$('name').value='';await load();}catch(e){$('status').textContent='خطأ: '+e.message}};
+</script></html>
