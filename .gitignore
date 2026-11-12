@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.*
+!.env.example
+data/players.json
+data/worlds.json
+*.log
