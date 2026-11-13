@@ -1,5 +1,5 @@
 // ============================================================================
-// ISLAND SURVIVAL V43 — Persistent Auto Lobby Server (Node.js, zero dependencies)
+// ISLAND SURVIVAL V46 — Guest Multiplayer Server (Node.js, zero dependencies)
 // Real-time WebSocket relay + authoritative world state for dynamic lobby architecture.
 // Run:  node server/server.js   (or: npm start)
 // Env:  PORT (default 8080), MAX_PLAYERS (default 20 per world)
@@ -7,16 +7,17 @@
 'use strict';
 const http = require('http'), crypto = require('crypto'), fs = require('fs'), path = require('path');
 
-const PORT = Number(process.env.PORT || 8080);
-const MAX_PLAYERS = Number(process.env.MAX_PLAYERS || 20);
+const PORT = Math.max(1, Math.min(65535, Number(process.env.PORT) || 8080));
+const MAX_PLAYERS = Math.max(2, Math.min(100, Number(process.env.MAX_PLAYERS) || 20));
 const CH = 32, H = 192, MAX_TILE_ID = 78, TILE_SIZE = 32, MAX_EDIT_REACH = 7;
 const ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
-const AUTH_FILE = path.join(DATA_DIR, 'accounts.json');
 const LOBBY_FILE = path.join(DATA_DIR, 'lobbies.json');
-const accounts = {}; const sessions = new Map(); const lobbies = {};
-const MAX_LOBBIES = Number(process.env.MAX_LOBBIES || 10000);
+const lobbies = {};
+const MAX_LOBBIES = Math.max(1, Math.min(50000, Number.isFinite(Number(process.env.MAX_LOBBIES)) ? Number(process.env.MAX_LOBBIES) : 10000));
+const MAX_CONNECTIONS = Math.max(10, Math.min(5000, Number(process.env.MAX_CONNECTIONS) || 250));
+let shuttingDown = false;
 const DEFAULT_LOBBY_CAPACITY = Number(process.env.MAX_PLAYERS || 20);
 
 // ---- World registry: three truly independent worlds -----------------------
@@ -30,83 +31,51 @@ const WORLDS = {
 const worlds = {};
 const playersDb = {}; // world -> { playerName -> {items, equipment} }
 
-function safeUser(v){return String(v||'').trim().toLowerCase();}
 function readJson(file, fallback){try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(_){return fallback;}}
-function saveAccounts(){try{fs.writeFileSync(AUTH_FILE,JSON.stringify(accounts));}catch(e){console.error('[accounts-save]',e.message);}}
-function saveLobbies(){try{const out={};for(const [id,l] of Object.entries(lobbies))out[id]={id:l.id,name:l.name,mode:l.mode,private:l.private,max:l.max,mods:l.mods||[],owner:l.owner,createdAt:l.createdAt,worldId:l.worldId||'island'};fs.writeFileSync(LOBBY_FILE,JSON.stringify(out));}catch(e){console.error('[lobbies-save]',e.message);}}
+function safeSecretEqual(a,b){const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return x.length===y.length&&x.length>0&&crypto.timingSafeEqual(x,y);}
+function atomicWriteJson(file, value){
+  fs.mkdirSync(path.dirname(file), {recursive:true});
+  const tmp=file+'.'+process.pid+'.'+crypto.randomBytes(4).toString('hex')+'.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(value));
+  fs.renameSync(tmp,file);
+}
+function saveLobbies(){try{const out={};for(const [id,l] of Object.entries(lobbies))out[id]={id:l.id,name:l.name,mode:l.mode,private:l.private,inviteCode:l.private?l.inviteCode:null,max:l.max,mods:l.mods||[],owner:l.owner,createdAt:l.createdAt,worldId:l.worldId||'island'};atomicWriteJson(LOBBY_FILE,out);}catch(e){console.error('[lobbies-save]',e.message);}}
 function publicLobby(l){return {id:l.id,name:l.name,mode:l.mode,private:!!l.private,players:l.players?l.players.size:0,max:l.max,mods:l.mods||[],status:'online'};}
-function makeLobby(id,name,mode='survival',isPrivate=false,max=DEFAULT_LOBBY_CAPACITY){return {id,name,mode,private:isPrivate,max:Math.max(2,Math.min(100,Number(max)||DEFAULT_LOBBY_CAPACITY)),mods:[],owner:null,createdAt:Date.now(),players:new Map(),worldId:'island',edits:{},doors:{},time:400};}
+function makeLobby(id,name,mode='survival',isPrivate=false,max=DEFAULT_LOBBY_CAPACITY){return {id,name,mode,private:isPrivate,inviteCode:isPrivate?crypto.randomBytes(12).toString('base64url'):null,max:Math.max(2,Math.min(100,Number(max)||DEFAULT_LOBBY_CAPACITY)),mods:[],owner:null,createdAt:Date.now(),players:new Map(),worldId:'island',edits:{},doors:{},time:400};}
 function nextLobbyId(){return String(Math.max(0,...Object.keys(lobbies).map(x=>Number(x)||0))+1).padStart(3,'0');}
-function createPersistentLobby(id,name='ردهة '+id){const l=makeLobby(id,name,'survival',false,DEFAULT_LOBBY_CAPACITY);l.worldId='island';lobbies[id]=l;const wid='lobby:'+id,base=WORLDS.island;WORLDS[wid]={name,icon:'🏝️',seed:(base.seed+Number(id)*7919)>>>0,type:base.type};worlds[wid]={edits:{},doors:{},time:400,players:new Map()};playersDb[wid]={};saveLobbies();saveData();console.log('[lobby-created]',id);return l;}
-function ensureAvailableLobby(){const open=Object.values(lobbies).find(l=>!l.private&&l.players.size<l.max);if(open)return open;if(Object.keys(lobbies).length>=MAX_LOBBIES)throw new Error('وصل النظام إلى الحد التشغيلي للردهـات');return createPersistentLobby(nextLobbyId());}
-function authToken(token){const a=sessions.get(String(token||''));if(!a)return null;return accounts[a]||null;}
+function createPersistentLobby(id,name='ردهة '+id,mode='survival',isPrivate=false,max=DEFAULT_LOBBY_CAPACITY){
+  const l=makeLobby(id,name,mode,isPrivate,max);l.worldId='island';lobbies[id]=l;
+  const wid='lobby:'+id,base=WORLDS.island;
+  WORLDS[wid]={name,icon:'🏝️',seed:(base.seed+Number(id)*7919)>>>0,type:base.type,kit:mode==='creative'?WORLDS.creative.kit:null};
+  worlds[wid]={edits:{},doors:{},time:400,players:new Map()};playersDb[wid]={};
+  saveLobbies();saveData();console.log('[lobby-created]',id);return l;
+}
+function ensureAvailableLobby(){
+  const open=Object.values(lobbies).find(l=>!l.private&&l.players.size<l.max);if(open)return open;
+  if(Object.keys(lobbies).length>=MAX_LOBBIES)throw new Error('وصل النظام إلى الحد التشغيلي للردهـات');
+  return createPersistentLobby(nextLobbyId());
+}
 function apiJson(res,status,obj){const b=Buffer.from(JSON.stringify(obj));res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization, x-admin-key','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Content-Length':b.length});res.end(b);}
 function readBody(req){return new Promise((resolve,reject)=>{let b='';req.on('data',c=>{b+=c;if(b.length>8192)reject(new Error('body too large'));});req.on('end',()=>{try{resolve(JSON.parse(b||'{}'));}catch(_){reject(new Error('invalid json'));}});});}
-function emailCodeHash(code,salt){return crypto.createHash('sha256').update(String(salt)+':'+String(code)).digest('hex');}
-async function sendVerificationEmail(email,code){
-  const apiKey=process.env.RESEND_API_KEY, from=process.env.EMAIL_FROM;
-  if(!apiKey||!from) throw new Error('إرسال البريد غير مُعدّ على الخادم. اضبط RESEND_API_KEY و EMAIL_FROM أولاً');
-  const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+apiKey,'Content-Type':'application/json'},body:JSON.stringify({from,to:[email],subject:'رمز تأكيد حساب ISLAND SURVIVAL',html:`<div style="font-family:Arial,sans-serif;direction:rtl"><h2>تأكيد حسابك في ISLAND SURVIVAL</h2><p>رمز التأكيد الخاص بك:</p><div style="font-size:32px;font-weight:bold;letter-spacing:8px">${code}</div><p>صلاحية الرمز 10 دقائق. لا تشاركه مع أي شخص.</p></div>`})});
-  if(!response.ok){const msg=await response.text();throw new Error('تعذر إرسال البريد: '+msg.slice(0,240));}
-}
 function handleApi(req,res,url){
+ if(shuttingDown){apiJson(res,503,{error:'الخادم يستعد للإغلاق، حاول بعد لحظات'});return true;}
  if(req.method==='OPTIONS'){apiJson(res,204,{});return true;}
- if(url.pathname==='/api/health'&&req.method==='GET'){apiJson(res,200,{ok:true,version:'43.0.0',websocket:'/ws',accounts:Object.keys(accounts).length,lobbies:Object.keys(lobbies).length,emailConfigured:!!(process.env.RESEND_API_KEY&&process.env.EMAIL_FROM)});return true;}
+ if(url.pathname==='/api/health'&&req.method==='GET'){const mem=process.memoryUsage();apiJson(res,shuttingDown?503:200,{ok:!shuttingDown,status:shuttingDown?'shutting_down':'online',version:'46.0.0',websocket:'/ws',authentication:'disabled',lobbies:Object.keys(lobbies).length,onlinePlayers:clients.size,maxConnections:MAX_CONNECTIONS,connectionCapacity:Math.max(0,MAX_CONNECTIONS-clients.size),uptime:Math.floor(process.uptime()),memory:{rss:mem.rss,heapUsed:mem.heapUsed,heapTotal:mem.heapTotal},});return true;}
  if(url.pathname==='/api/lobbies'&&req.method==='GET'){try{ensureAvailableLobby();}catch(e){} const q=String(url.searchParams.get('q')||'').trim().toLowerCase();let list=Object.values(lobbies).filter(l=>!l.private).map(publicLobby);if(q)list=list.filter(l=>l.id.toLowerCase().includes(q)||l.name.toLowerCase().includes(q));apiJson(res,200,{lobbies:list});return true;}
- if(url.pathname==='/api/register'&&req.method==='POST'){readBody(req).then(async body=>{
-   const username=String(body.username||'').trim(),key=safeUser(username),password=String(body.password||''),email=String(body.email||'').trim().toLowerCase();
-   if(!/^[A-Za-z0-9_]{3,16}$/.test(username))return apiJson(res,400,{error:'اسم المستخدم يجب أن يكون 3-16 حرفًا إنجليزيًا أو رقمًا أو _'});
-   if(password.length<8||password.length>128)return apiJson(res,400,{error:'كلمة المرور يجب أن تكون 8 أحرف على الأقل'});
-   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)return apiJson(res,400,{error:'اكتب بريدًا إلكترونيًا صحيحًا'});
-   if(accounts[key])return apiJson(res,409,{error:'اسم المستخدم مستخدم بالفعل'});
-   if(Object.values(accounts).some(a=>a.email===email))return apiJson(res,409,{error:'هذا البريد مرتبط بحساب آخر'});
-   const salt=crypto.randomBytes(16).toString('hex'),hash=crypto.scryptSync(password,salt,64).toString('hex');
-   const code=String(crypto.randomInt(0,1000000)).padStart(6,'0'),codeSalt=crypto.randomBytes(16).toString('hex');
-   const account={id:crypto.randomUUID(),username,email,salt,hash,emailVerified:false,verification:{salt:codeSalt,hash:emailCodeHash(code,codeSalt),expiresAt:Date.now()+10*60*1000,lastSentAt:Date.now(),attempts:0},createdAt:Date.now(),profile:{},progress:{},inventory:{},equipment:{},worldProgress:{},modData:{},installedMods:[],schemaVersion:2};
-   try{await sendVerificationEmail(email,code);}catch(e){console.error('[email]',e.message);return apiJson(res,503,{error:e.message});}
-   accounts[key]=account;saveAccounts();apiJson(res,201,{ok:true,verificationRequired:true,message:'أرسلنا رمز التأكيد إلى بريدك الإلكتروني'});
- }).catch(e=>apiJson(res,400,{error:e.message}));return true;}
- if(url.pathname==='/api/verify-email'&&req.method==='POST'){readBody(req).then(body=>{
-   const key=safeUser(body.username),a=accounts[key],code=String(body.code||'').trim();
-   if(!a)return apiJson(res,404,{error:'الحساب غير موجود'});
-   if(a.emailVerified){const token=crypto.randomBytes(32).toString('hex');sessions.set(token,key);return apiJson(res,200,{ok:true,token,user:{id:a.id,username:a.username}});}
-   const v=a.verification;if(!v||Date.now()>v.expiresAt)return apiJson(res,400,{error:'انتهت صلاحية الرمز. اطلب رمزًا جديدًا'});
-   if(++v.attempts>5){saveAccounts();return apiJson(res,429,{error:'تجاوزت عدد المحاولات. اطلب رمزًا جديدًا'});}
-   const supplied=Buffer.from(emailCodeHash(code,v.salt)),expected=Buffer.from(v.hash);
-   if(supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected)){saveAccounts();return apiJson(res,400,{error:'رمز التأكيد غير صحيح'});}
-   a.emailVerified=true;delete a.verification;saveAccounts();
-   const token=crypto.randomBytes(32).toString('hex');sessions.set(token,key);apiJson(res,200,{ok:true,token,user:{id:a.id,username:a.username}});
- }).catch(e=>apiJson(res,400,{error:e.message}));return true;}
- if(url.pathname==='/api/resend-code'&&req.method==='POST'){readBody(req).then(async body=>{
-   const key=safeUser(body.username),a=accounts[key];if(!a)return apiJson(res,404,{error:'الحساب غير موجود'});
-   if(a.emailVerified)return apiJson(res,400,{error:'البريد مؤكد بالفعل'});
-   if(a.verification&&Date.now()-a.verification.lastSentAt<60000)return apiJson(res,429,{error:'انتظر دقيقة قبل طلب رمز جديد'});
-   const code=String(crypto.randomInt(0,1000000)).padStart(6,'0'),salt=crypto.randomBytes(16).toString('hex');
-   try{await sendVerificationEmail(a.email,code);}catch(e){return apiJson(res,503,{error:e.message});}
-   a.verification={salt,hash:emailCodeHash(code,salt),expiresAt:Date.now()+600000,lastSentAt:Date.now(),attempts:0};saveAccounts();apiJson(res,200,{ok:true,message:'تم إرسال رمز جديد'});
- }).catch(e=>apiJson(res,400,{error:e.message}));return true;}
- if(url.pathname==='/api/login'&&req.method==='POST'){readBody(req).then(body=>{
-   const key=safeUser(body.username),a=accounts[key];if(!a)return apiJson(res,401,{error:'اسم المستخدم أو كلمة المرور غير صحيحة'});
-   const supplied=Buffer.from(crypto.scryptSync(String(body.password||''),a.salt,64).toString('hex')),expected=Buffer.from(a.hash);
-   if(supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected))return apiJson(res,401,{error:'اسم المستخدم أو كلمة المرور غير صحيحة'});
-   if(!a.emailVerified)return apiJson(res,403,{error:'أكد بريدك الإلكتروني أولاً باستخدام رمز التحقق'});
-   const token=crypto.randomBytes(32).toString('hex');sessions.set(token,key);apiJson(res,200,{ok:true,token,user:{id:a.id,username:a.username}});
- }).catch(e=>apiJson(res,400,{error:e.message}));return true;}
  // Lobby provisioning is deliberately server-admin-only; there is no in-game create endpoint.
- if(url.pathname==='/api/admin/lobbies'&&req.method==='POST'){if(!process.env.ADMIN_API_KEY||req.headers['x-admin-key']!==process.env.ADMIN_API_KEY)return apiJson(res,403,{error:'غير مصرح'});
+ if(url.pathname==='/api/admin/lobbies'&&req.method==='POST'){if(!process.env.ADMIN_API_KEY||!safeSecretEqual(req.headers['x-admin-key'],process.env.ADMIN_API_KEY)){apiJson(res,403,{error:'غير مصرح'});return true;}
    readBody(req).then(body=>{if(Object.keys(lobbies).length>=MAX_LOBBIES)return apiJson(res,503,{error:'وصل النظام إلى الحد التشغيلي'});
     const id=nextLobbyId();
     const name=String(body.name||('ردهة '+id)).trim().slice(0,32)||('ردهة '+id);
-    const l=createPersistentLobby(id,name);l.mode=body.mode==='creative'?'creative':'survival';l.max=Math.max(2,Math.min(100,Number(body.max)||DEFAULT_LOBBY_CAPACITY));saveLobbies();
-    apiJson(res,201,{ok:true,lobby:publicLobby(l)});
+    const mode=body.mode==='creative'?'creative':'survival';const max=Math.max(2,Math.min(100,Number(body.max)||DEFAULT_LOBBY_CAPACITY));const l=createPersistentLobby(id,name,mode,!!body.private,max);saveLobbies();
+    apiJson(res,201,{ok:true,lobby:publicLobby(l),inviteCode:l.private?l.inviteCode:undefined});
    }).catch(e=>apiJson(res,400,{error:e.message}));return true;}
  return false;
 }
 function loadData() {
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
-  Object.assign(accounts,readJson(AUTH_FILE,{}));
   const savedLobbies=readJson(LOBBY_FILE,{});
-  for(const [id,v] of Object.entries(savedLobbies)){lobbies[id]=Object.assign(makeLobby(id,v.name,v.mode,v.private,v.max),v,{players:new Map()});}
+  for(const [id,v] of Object.entries(savedLobbies)){const l=Object.assign(makeLobby(id,v.name,v.mode,v.private,v.max),v,{players:new Map()});if(l.private&&!l.inviteCode)l.inviteCode=crypto.randomBytes(12).toString('base64url');lobbies[id]=l;}
   if(!Object.keys(lobbies).length){const id='001';lobbies[id]=makeLobby(id,'ردهة 001','survival',false,DEFAULT_LOBBY_CAPACITY);}
   let w = null, p = null;
   try { w = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'worlds.json'), 'utf8')); } catch (e) {}
@@ -122,14 +91,21 @@ function saveData() {
   try {
     const w = {}, pd = {};
     for (const id in worlds) { w[id] = { edits: worlds[id].edits, doors: worlds[id].doors, time: worlds[id].time }; pd[id] = playersDb[id]; }
-    fs.writeFileSync(path.join(DATA_DIR, 'worlds.json'), JSON.stringify(w));
-    fs.writeFileSync(path.join(DATA_DIR, 'players.json'), JSON.stringify(pd));
+    atomicWriteJson(path.join(DATA_DIR, 'worlds.json'), w);
+    atomicWriteJson(path.join(DATA_DIR, 'players.json'), pd);
   } catch (e) { console.error('[save]', e.message); }
 }
 loadData();
 setInterval(saveData, 60000);
-process.on('SIGINT', () => { saveData(); process.exit(0); });
-process.on('SIGTERM', () => { saveData(); process.exit(0); });
+function gracefulShutdown(signal){
+  if(shuttingDown)return;shuttingDown=true;console.log('[shutdown]',signal,'saving persistent state...');
+  try{saveLobbies();saveData();}catch(e){console.error('[shutdown-save]',e.message);}
+  for(const [socket] of clients){try{sendFrame(socket,8,Buffer.from([0x03,0xE9]));socket.end();}catch(_){try{socket.destroy();}catch(__){}}}
+  const force=setTimeout(()=>process.exit(0),8000);force.unref();
+  server.close(()=>{try{saveLobbies();saveData();}catch(_){}clearTimeout(force);process.exit(0);});
+}
+process.on('SIGINT',()=>gracefulShutdown('SIGINT'));
+process.on('SIGTERM',()=>gracefulShutdown('SIGTERM'));
 
 // ---- Authoritative world clock --------------------------------------------
 setInterval(() => {
@@ -181,15 +157,20 @@ const server = http.createServer((req, res) => {
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const clients = new Map(); // socket -> client record
 let nextId = 1;
+setInterval(()=>{const now=Date.now();for(const [socket,c] of clients){if(c.lastPing&&now-c.lastPing>70000&&c.lastPong<c.lastPing){try{socket.destroy();}catch(_){}}else{c.lastPing=now;try{sendFrame(socket,9,Buffer.from('island'));}catch(_){try{socket.destroy();}catch(__){}}}}},25000).unref();
 
 server.on('upgrade', (req, socket) => {
-  if (!req.url.startsWith('/ws')) { socket.destroy(); return; }
+  if (shuttingDown || req.method!=='GET' || !['/ws','/ws/'].includes((req.url||'').split('?')[0]) ||
+      String(req.headers.upgrade||'').toLowerCase()!=='websocket' || !/\bupgrade\b/i.test(String(req.headers.connection||'')) ||
+      String(req.headers['sec-websocket-version']||'')!=='13' || clients.size>=MAX_CONNECTIONS) { socket.destroy(); return; }
   const key = req.headers['sec-websocket-key'];
-  if (!key) { socket.destroy(); return; }
+  let decodedKey;try{decodedKey=Buffer.from(String(key||''),'base64');}catch(_){}
+  if (!key || !decodedKey || decodedKey.length!==16) { socket.destroy(); return; }
   const accept = crypto.createHash('sha1').update(key + WS_GUID).digest('base64');
   socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
   socket.setNoDelay(true);
-  const c = { id: 'p' + (nextId++), world: null, name: null, x: 0, y: 0, skin: 0, buf: Buffer.alloc(0), rate: {} };
+  const c = { id: 'p' + (nextId++), world: null, name: null, accountId:null, x: 0, y: 0, skin: 0, buf: Buffer.alloc(0), rate: {}, lastPing:0, lastPong:Date.now(), joined:false };
+  socket.setTimeout(120000,()=>socket.destroy());
   clients.set(socket, c);
   socket.on('data', d => {
     c.buf = Buffer.concat([c.buf, d]);
@@ -201,6 +182,7 @@ server.on('upgrade', (req, socket) => {
         let msg; try { msg = JSON.parse(f.payload.toString('utf8')); } catch (e) { continue; }
         handleMessage(c, socket, msg);
       } else if (f.op === 9) { try { sendFrame(socket, 10, f.payload); } catch (e) {} }
+      else if (f.op === 10) { c.lastPong=Date.now(); }
       else if (f.op === 8) { socket.end(); return; }
     }
   });
@@ -211,11 +193,13 @@ server.on('upgrade', (req, socket) => {
 function readFrame(c) {
   const b = c.buf;
   if (b.length < 2) return null;
+  if((b[0]&0x70)!==0 || !(b[0]&0x80) || !(b[1]&0x80))return false;
   const op = b[0] & 0x0f;
+  if(![1,8,9,10].includes(op))return false;
   let len = b[1] & 0x7f, off = 2;
   if (len === 126) { if (b.length < 4) return null; len = b.readUInt16BE(2); off = 4; }
   else if (len === 127) { if (b.length < 10) return null; len = Number(b.readBigUInt64BE(2)); off = 10; }
-  if (len > 262144) return false;
+  if (len > 32768 || (op>=8 && (!(b[0]&0x80) || len>125))) return false;
   const masked = (b[1] & 0x80) !== 0;
   let mask = null;
   if (masked) { if (b.length < off + 4) return null; mask = b.slice(off, off + 4); off += 4; }
@@ -252,27 +236,37 @@ function handleMessage(c, s, msg) {
   const t = msg.t;
   if (t === 'info') { const list={}; for(const [id,l] of Object.entries(lobbies)) list[id]={online:true,players:l.players.size,max:l.max,name:l.name,private:l.private,mode:l.mode}; sendTo(s,{t:'info',worlds:list,lobbies:Object.values(lobbies).filter(l=>!l.private).map(publicLobby)}); return; }
   if (t === 'join') {
-    const account=authToken(msg.token); if(!account||!account.emailVerified){sendTo(s,{t:'error',msg:'يجب تسجيل الدخول بحساب للانضمام إلى الردهة'});s.end();return;}
-    const lobbyId=String(msg.world||''); const lobby=lobbies[lobbyId];
+    if(c.joined){sendTo(s,{t:'error',msg:'تم إرسال طلب دخول بالفعل'});return;}
+    const guestId=String(msg.guestId||'');
+    if(!/^[A-Za-z0-9_-]{12,80}$/.test(guestId)){sendTo(s,{t:'error',msg:'تعذر التحقق من هوية اللاعب المؤقتة. حدّث الصفحة.'});s.end();return;}
+    // A reconnect with the same browser guest ID replaces its old session before capacity checks.
+    for(const [oldSocket,oldClient] of clients){if(oldSocket!==s&&oldClient.accountId===guestId){clients.delete(oldSocket);try{oldSocket.destroy();}catch(_){}onLeave(oldClient);}}
+    let lobbyId=String(msg.world||'');let lobby=lobbies[lobbyId];
     if(!lobby){sendTo(s,{t:'error',msg:'هذه الردهة غير موجودة'});s.end();return;}
-    if(lobby.private && String(msg.invite||'')!=='OWNER'){sendTo(s,{t:'error',msg:'هذه ردهة خاصة وتحتاج دعوة'});s.end();return;}
-    const wid='lobby:'+lobbyId;
-    const w=worlds[wid];
-    if (lobby.players.size >= lobby.max) { sendTo(s, { t: 'error', msg: 'السيرفر ممتلئ — حاول لاحقاً' }); s.end(); return; }
-    let name = String(account.username || 'لاعب').slice(0, 16);
+    if(lobby.private){const supplied=String(msg.invite||''),expected=String(lobby.inviteCode||'');const a=Buffer.from(supplied),b=Buffer.from(expected);if(!expected||a.length!==b.length||!crypto.timingSafeEqual(a,b)){sendTo(s,{t:'error',msg:'هذه ردهة خاصة وتحتاج رمز الدعوة الصحيح'});s.end();return;}}
+    // A room may fill between the browser refresh and the WebSocket join. Redirect
+    // public-room joins to the next available room instead of rejecting the player.
+    if(lobby.players.size>=lobby.max){
+      if(lobby.private){sendTo(s,{t:'error',msg:'الردهة الخاصة ممتلئة'});s.end();return;}
+      try{lobby=ensureAvailableLobby();lobbyId=lobby.id;}catch(e){sendTo(s,{t:'error',msg:'لا توجد ردهة متاحة حاليًا. حاول بعد قليل.'});s.end();return;}
+    }
+    const wid='lobby:'+lobbyId;const w=worlds[wid];
+    if(!w){sendTo(s,{t:'error',msg:'تعذر تحميل عالم الردهة. أعد المحاولة.'});s.end();return;}
+
+    let name = String(msg.name || 'مغامر').replace(/[^\p{L}\p{N}_ -]/gu,'').trim().slice(0,16) || 'مغامر';
     const base = name; let n = 2;
     while (w.players.has(name)) name = base + '#' + (n++);   // unique names per world
-    c.world = wid; c.lobbyId=lobbyId; c.accountId=account.id; c.accountKey=safeUser(account.username); c.name = name; lobby.players.set(name,c.id); w.players.set(name, c.id);
+    c.world = wid; c.lobbyId=lobbyId; c.accountId=guestId; c.name = name; c.joined=true; lobby.players.set(name,c.id); w.players.set(name, c.id);
     const others = [];
     for (const [nm, id] of w.players) {
       if (nm === name) continue;
       let cc = null; for (const v of clients.values()) if (v.id === id) { cc = v; break; }
       others.push({ id, name: nm, skin: cc ? cc.skin || 0 : 0, x: cc ? cc.x || 0 : 0, y: cc ? cc.y || 0 : 0, face: 1 });
     }
-    sendTo(s, { t: 'welcome', id: c.id, world: wid, lobbyId, accountId:account.id, name, worldName: lobby.name,
+    sendTo(s, { t: 'welcome', id: c.id, world: wid, lobbyId, accountId:guestId, name, worldName: lobby.name,
       seed: WORLDS[wid].seed, type: WORLDS[wid].type,
       edits: w.edits, doors: w.doors, time: w.time,
-      kit: WORLDS[wid].kit || null, inv: playersDb[wid][account.id] || null, story: (playersDb[wid][account.id] || {}).story || null, players: others });
+      kit: WORLDS[wid].kit || null, inv: playersDb[wid][guestId] || null, story: (playersDb[wid][guestId] || {}).story || null, players: others });
     broadcastWorld(wid, { t: 'player:join', id: c.id, name, skin: c.skin || 0 }, s);
     console.log('[join]', name, '-> lobby #' + lobbyId, '(' + lobby.players.size + '/' + lobby.max + ')');
     // Keep one persistent, non-full public lobby available; create the next ID only when all existing public lobbies are full.
@@ -342,7 +336,7 @@ function handleMessage(c, s, msg) {
       eq[sl] = typeof v === 'string' ? v.slice(0, 40) : null;
     });
     playersDb[c.world][c.accountId] = Object.assign({}, playersDb[c.world][c.accountId] || {}, { items: inv, equipment: eq });
-    return;
+    saveData();return;
   }
   if (t === 'story:sync') { // Per-player progression snapshot; bounded and isolated from other players.
     if (overRate(c, s, 'story', 2)) return;
@@ -361,7 +355,7 @@ function handleMessage(c, s, msg) {
         hp: Math.max(0, Math.min(1200, Number(src.dragon.hp) || 0)), phase: Math.max(1, Math.min(3, Number(src.dragon.phase) || 1)),
         crystals: Math.max(0, Math.min(10, Math.floor(Number(src.dragon.crystals) || 0))), defeated: !!src.dragon.defeated } : {} };
     playersDb[c.world][c.accountId] = old;
-    sendTo(s, { t: 'story:ack' });
+    sendTo(s, { t: 'story:ack' });saveData();
     return;
   }
   if (t === 'chat') {
@@ -399,14 +393,16 @@ function onLeave(c) {
     broadcastWorld(c.world, { t: 'player:leave', id: c.id, name: c.name });
     console.log('[leave]', c.name, '<-', c.world, '(' + w.players.size + ' online)');
   }
-  c.world = null; c.lobbyId=null;
+  c.world = null; c.lobbyId=null;saveData();
 }
 
-server.listen(PORT, () => {
-  console.log('ISLAND SURVIVAL V43 server running');
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('ISLAND SURVIVAL V46 server running');
   console.log('  HTTP + WS : ws://0.0.0.0:' + PORT + '/ws');
   console.log('  Worlds    : ' + Object.keys(WORLDS).join(', '));
   console.log('  Max/lobby : ' + DEFAULT_LOBBY_CAPACITY);
+  console.log('  Max sockets: ' + MAX_CONNECTIONS);
   console.log('  Lobbies   : ' + Object.keys(lobbies).length + ' (dynamic registry)');
-  console.log('  Auth      : username/password + email OTP + scrypt');
+  console.log('  Auth      : disabled (guest multiplayer)');
+  console.log('  Data dir  : ' + DATA_DIR);
 });

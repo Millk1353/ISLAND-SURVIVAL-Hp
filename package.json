@@ -1,12 +1,13 @@
 {
-  "name": "island-survival-v43",
-  "version": "43.0.0",
-  "description": "ISLAND SURVIVAL V43 - persistent automatic lobbies, email-verified accounts",
+  "name": "island-survival",
+  "version": "46.0.0",
+  "description": "ISLAND SURVIVAL V46 - guest multiplayer, cinematic mobile start screen, auto lobbies, persistent worlds",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "check": "node --check server/server.js",
-    "check:client": "node --check server/server.js"
+    "check": "node --check server/server.js && npm run check:client",
+    "check:client": "node scripts/check-client.js",
+    "test": "node scripts/smoke-test.js"
   },
   "engines": {
     "node": ">=18"
