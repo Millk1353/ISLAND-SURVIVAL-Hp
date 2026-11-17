@@ -1,0 +1,16 @@
+{
+  "name": "island-survival",
+  "version": "47.0.0",
+  "description": "ISLAND SURVIVAL V47 - guest multiplayer, cinematic mobile start screen, auto lobbies, persistent worlds",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "check": "node --check server/server.js && npm run check:client",
+    "check:client": "node scripts/check-client.js",
+    "test": "node scripts/smoke-test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
